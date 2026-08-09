@@ -1,0 +1,21 @@
+{
+  "name": "pdf-audiobook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synchronized PDF audiobook reader",
+  "scripts": {
+    "dev:frontend": "bun --filter frontend bdev",
+    "dev:backend": "bun --filter backend bdev",
+    "dev": "bun run dev:frontend & bun run dev:backend",
+    "build:frontend": "bun --filter frontend build",
+    "build:backend": "bun --filter backend build",
+    "build": "bun run build:frontend && bun run build:backend"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "bun": ">=1.0.0"
+  }
+}
