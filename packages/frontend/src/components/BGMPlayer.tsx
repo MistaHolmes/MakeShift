@@ -196,12 +196,11 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
   return (
     <div style={{
       position: "fixed", bottom: 40, 
-      right: centered ? "auto" : "6vw",
-      left: centered ? "50%" : "auto",
-      transform: centered ? "translateX(-50%)" : "none",
+      left: centered ? "50%" : "calc(100% - 6vw)",
+      transform: centered ? "translateX(-50%)" : "translateX(-100%)",
       zIndex: 40,
       display: "flex", alignItems: "flex-end", justifyContent: "flex-end",
-      transition: "all 0.5s cubic-bezier(0.22, 1, 0.36, 1)"
+      transition: "left 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)"
     }}>
       {/* Hidden container for YT iframe */}
       <div id="bgm-yt-player" style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />
