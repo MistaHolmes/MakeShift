@@ -146,7 +146,6 @@ export default function LibrarySidebar({
                     </p>
                   </div>
 
-                  {/* Delete */}
                   <button
                     id={`delete-book-${book.id}`}
                     onClick={(e) => { e.stopPropagation(); onDeleteBook(book.id); }}
@@ -155,10 +154,10 @@ export default function LibrarySidebar({
                       width: 28, height: 28, borderRadius: "50%", border: "none",
                       background: "transparent", cursor: "pointer",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "rgba(255,80,80,0.6)", opacity: 0, transition: "opacity 0.15s ease",
+                      color: "rgba(255,80,80,0.6)", transition: "all 0.15s ease",
                     }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,0,0,0.12)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,80,80,1)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,0,0,0.12)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,80,80,0.6)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                       <polyline points="3 6 5 6 21 6"/>

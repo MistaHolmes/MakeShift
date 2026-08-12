@@ -2,11 +2,14 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 
 import UploadZone from "@/components/UploadZone";
 import AudioPlayerBar from "@/components/AudioPlayerBar";
 import LibrarySidebar, { type Book } from "@/components/LibrarySidebar";
 import ProcessingOverlay, { type ProcessingStage } from "@/components/ProcessingOverlay";
+import ReaderPanel, { type SentenceTiming } from "@/components/ReaderPanel";
+import { savePdfBlob, getPdfBlob, deletePdfBlob } from "@/lib/storage/db";
 
 
 
@@ -37,11 +40,12 @@ function PillButton({ id, onClick, icon, label }: {
           className="hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-200"
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-            padding: "9px 20px", border: "none",
-            background: "rgba(255,255,255,0.15)", cursor: "pointer",
+            padding: "8px 24px", border: "1px solid rgba(255,255,255,0.2)",
+            background: "rgba(255,255,255,0.1)", cursor: "pointer",
             fontSize: 13, fontWeight: 600, color: "#fff",
             fontFamily: "inherit", whiteSpace: "nowrap",
             outline: "none",
+            borderRadius: 99,
           }}
         >
           {icon}
@@ -57,7 +61,6 @@ type AppView = "landing" | "reader";
 
 export default function HomePage() {
   const time = useRealtimeClock();
-  const audioRef = useRef<HTMLAudioElement>(null);
 
   const [view, setView]                     = useState<AppView>("landing");
   const [sidebarOpen, setSidebarOpen]       = useState(false);
@@ -68,45 +71,176 @@ export default function HomePage() {
   const [processingStage, setProcessingStage] = useState<ProcessingStage>("uploading");
   const [processingProgress, setProcessingProgress] = useState(0);
   const [pendingFileName, setPendingFileName] = useState("");
+  const [activePdfUrl, setActivePdfUrl]     = useState<string | null>(null);
+  const [showPdfView, setShowPdfView]       = useState(true);
+
+  const [jobResult, setJobResult]           = useState<any>(null);
+  const [timings, setTimings]               = useState<SentenceTiming[]>([]);
+  const [activeSentenceIdx, setActiveSentenceIdx] = useState(0);
+  const [duration, setDuration]             = useState(0);
+  const [currentTime, setCurrentTime]       = useState(0);
+  const [readerPanelOpen, setReaderPanelOpen] = useState(false);
 
   const [isPlaying, setIsPlaying]           = useState(false);
-  const [currentTime, setCurrentTime]       = useState(5);
-  const [duration]                          = useState(224);
   const [playbackRate, setPlaybackRate]     = useState(1);
 
-  /* ── Simulate processing ─────────────────────────────────── */
-  const simulateProcessing = useCallback((file: File) => {
+  // We use a ref to track the latest book data so we can save it on unmount/tick without frequent re-renders
+  const stateRef = useRef({ activeBook, timings, duration, jobResult, currentTime, books, activeSentenceIdx });
+  useEffect(() => {
+    stateRef.current = { activeBook, timings, duration, jobResult, currentTime, books, activeSentenceIdx };
+  }, [activeBook, timings, duration, jobResult, currentTime, books, activeSentenceIdx]);
+
+  /* ── Persistence: restore from localStorage ────────────── */
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("makeshift_library_v3");
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.books?.length) {
+           setBooks(data.books);
+        }
+      }
+    } catch {}
+  }, []);
+
+  /* ── Persistence: save to localStorage on change (throttled) ───────── */
+  useEffect(() => {
+    const saveState = () => {
+      const state = stateRef.current;
+
+      try {
+        const existingData = JSON.parse(localStorage.getItem("makeshift_library_v3") || '{"bookData":{}}');
+
+        if (state.activeBook) {
+           existingData.bookData = existingData.bookData || {};
+           existingData.bookData[state.activeBook.id] = {
+             timings: state.timings,
+             duration: state.duration,
+             jobResult: state.jobResult,
+             currentTime: state.currentTime,
+             activeSentenceIdx: state.activeSentenceIdx,
+           };
+        }
+
+        existingData.books = state.books;
+        localStorage.setItem("makeshift_library_v3", JSON.stringify(existingData));
+      } catch {}
+    };
+
+    const interval = setInterval(saveState, 2000);
+    window.addEventListener("beforeunload", saveState);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", saveState);
+      saveState(); // Save on unmount
+    };
+  }, []);
+
+  /* ── Process PDF via Real Backend ────────────────────────── */
+  const processFile = useCallback(async (file: File) => {
     setPendingFileName(file.name);
     setProcessing(true);
     setProcessingStage("uploading");
-    setProcessingProgress(0);
+    setProcessingProgress(10);
 
-    const steps: { stage: ProcessingStage; progress: number; delay: number }[] = [
-      { stage: "uploading",    progress: 15,  delay: 0 },
-      { stage: "uploading",    progress: 30,  delay: 700 },
-      { stage: "extracting",   progress: 45,  delay: 1400 },
-      { stage: "extracting",   progress: 55,  delay: 2100 },
-      { stage: "cleaning",     progress: 65,  delay: 2800 },
-      { stage: "synthesizing", progress: 78,  delay: 3600 },
-      { stage: "synthesizing", progress: 91,  delay: 4500 },
-      { stage: "ready",        progress: 100, delay: 5400 },
-    ];
-    steps.forEach(({ stage, progress, delay }) =>
-      setTimeout(() => { setProcessingStage(stage); setProcessingProgress(progress); }, delay)
-    );
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", file.name.replace(/\.[^/.]+$/, ""));
+
+      const res = await fetch("/api/process", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+
+      const { jobId } = await res.json();
+
+      // Poll for status
+      const poll = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/jobs/${jobId}`);
+          if (!statusRes.ok) throw new Error("Polling failed");
+          const job = await statusRes.json();
+
+          if (job.status === "error") {
+            clearInterval(poll);
+            alert("Error processing PDF: " + job.error);
+            setProcessing(false);
+          } else {
+            setProcessingStage(job.status);
+            setProcessingProgress(job.progress);
+
+              if (job.status === "ready") {
+              clearInterval(poll);
+              setProcessingProgress(100);
+
+              // Fetch alignment data and populate timings
+              if (job.result?.alignmentData) {
+                setJobResult(job.result);
+                setTimings(job.result.alignmentData.timings || []);
+                setDuration(job.result.alignmentData.totalDuration || 0);
+                setCurrentTime(0);
+                setActiveSentenceIdx(0);
+                handleProcessingComplete(job.result, file);
+              } else if (job.result?.alignmentUrl) {
+                fetch(job.result.alignmentUrl)
+                  .then(r => r.json())
+                  .then(alignment => {
+                    const completeResult = {
+                      ...job.result,
+                      alignmentData: alignment
+                    };
+                    setJobResult(completeResult);
+                    setTimings(alignment.timings || []);
+                    setDuration(alignment.totalDuration || 0);
+                    setCurrentTime(0);
+                    setActiveSentenceIdx(0);
+
+                    // Trigger completion
+                    handleProcessingComplete(completeResult, file);
+                  })
+                  .catch(console.error);
+              } else {
+                 handleProcessingComplete(job.result, file);
+              }
+            }
+          }
+        } catch (e) {
+          clearInterval(poll);
+          alert("Error checking status");
+          setProcessing(false);
+        }
+      }, 1500);
+
+    } catch (e: any) {
+      alert("Error: " + e.message);
+      setProcessing(false);
+    }
   }, []);
 
   const handleFileSelect = useCallback(
-    (file: File) => simulateProcessing(file), [simulateProcessing]
+    (file: File) => processFile(file), [processFile]
   );
 
-  const handleProcessingComplete = useCallback(() => {
+  const handleProcessingComplete = useCallback(async (result: any, rawFile?: File) => {
+    const bookId = `book-${Date.now()}`;
+    let finalTitle = "Untitled Book";
+
+    if (rawFile) {
+      await savePdfBlob(bookId, rawFile);
+      setActivePdfUrl(URL.createObjectURL(rawFile));
+      finalTitle = rawFile.name.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
+    } else if (pendingFileName) {
+      finalTitle = pendingFileName.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
+    }
+
     const newBook: Book = {
-      id: `book-${Date.now()}`,
-      title: pendingFileName.replace(/\.pdf$/i, "").replace(/[-_]/g, " "),
-      author: "Unknown Author",
-      fileName: pendingFileName,
-      pageCount: Math.floor(Math.random() * 200) + 50,
+      id: bookId,
+      title: finalTitle || "Untitled Book",
+      author: "MakeShift Audio",
+      fileName: rawFile?.name || pendingFileName || "unknown.pdf",
+      pageCount: result?.pageCount || 0,
       lastReadAt: Date.now(),
       processingStatus: "ready",
       coverAccent: ["#c0784a", "#4a7fc0", "#6a9e68", "#9c6ac0"][Math.floor(Math.random() * 4)],
@@ -115,31 +249,211 @@ export default function HomePage() {
     setActiveBook(newBook);
     setProcessing(false);
     setView("reader");
+    setReaderPanelOpen(true);
   }, [pendingFileName]);
 
-  /* ── Dummy playback ticker ───────────────────────────────── */
+  /* ── Audio playback via Web Speech API ────────────────── */
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPlayingRef = useRef(isPlaying);
+  
   useEffect(() => {
-    if (!isPlaying) return;
-    const t = setInterval(() => {
-      setCurrentTime((prev) => {
-        if (prev >= duration) { setIsPlaying(false); return duration; }
-        return prev + 0.25;
-      });
-    }, 250);
-    return () => clearInterval(t);
-  }, [isPlaying, duration]);
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
-  const handlePlayPause   = useCallback(() => setIsPlaying((v) => !v), []);
-  const handleSeek        = useCallback((t: number) => setCurrentTime(t), []);
-  const handleSkipBack    = useCallback(() => setCurrentTime((t) => Math.max(0, t - 10)), []);
-  const handleSkipForward = useCallback(() => setCurrentTime((t) => Math.min(duration, t + 10)), []);
+  useEffect(() => {
+    window.speechSynthesis.cancel();
+    if (activeSentenceIdx >= timings.length) {
+      setIsPlaying(false);
+      return;
+    }
+
+    // Ensure voices are loaded (sometimes required on first load)
+    window.speechSynthesis.getVoices();
+
+    if (activeSentenceIdx >= timings.length) {
+      setIsPlaying(false);
+      return;
+    }
+
+    const sentence = timings[activeSentenceIdx];
+    if (!sentence) {
+      setIsPlaying(false);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(sentence.text);
+    utterance.rate = playbackRate;
+
+    // Attempt to pick a decent English voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Premium') || v.name.includes('Google') || v.name.includes('Samantha')));
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    utterance.onend = () => {
+      setCurrentTime(sentence.audioEnd);
+      setActiveSentenceIdx(prev => {
+        const next = prev + 1;
+        if (next >= timings.length) setIsPlaying(false);
+        return next;
+      });
+    };
+
+    utterance.onboundary = (e) => {
+      if (e.name === 'word') {
+        const pct = e.charIndex / Math.max(1, sentence.text.length);
+        const sentenceDuration = sentence.audioEnd - sentence.audioStart;
+        setCurrentTime(sentence.audioStart + (pct * sentenceDuration));
+      }
+    };
+
+    utterance.onerror = (e) => {
+      if (e.error !== 'canceled' && e.error !== 'interrupted') {
+        console.error("SpeechSynthesis error type:", e.error, "event:", e);
+        if (e.error === 'synthesis-failed') {
+           alert("Playback failed. Your operating system's built-in text-to-speech engine is missing or misconfigured. (Common on Linux if speech-dispatcher is not installed).");
+           setIsPlaying(false);
+        }
+      }
+    };
+
+    currentUtteranceRef.current = utterance;
+
+    let speakTimeout: any;
+    if (isPlayingRef.current) {
+      speakTimeout = setTimeout(() => {
+        window.speechSynthesis.speak(utterance);
+      }, 50);
+    }
+
+    return () => {
+      if (speakTimeout) clearTimeout(speakTimeout);
+      window.speechSynthesis.cancel();
+    };
+  }, [activeSentenceIdx, playbackRate, timings]);
+
+  // Strictly ensure audio is paused when not in reader view
+  useEffect(() => {
+    if (view === "landing" && isPlaying) {
+      setIsPlaying(false);
+      window.speechSynthesis.cancel();
+    }
+  }, [view, isPlaying]);
+
+  const handlePlayPause = useCallback(() => {
+    setIsPlaying((v) => {
+      const nextPlay = !v;
+      if (nextPlay) {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        } else if (currentUtteranceRef.current && !window.speechSynthesis.speaking) {
+          window.speechSynthesis.speak(currentUtteranceRef.current);
+        }
+      } else {
+        window.speechSynthesis.pause();
+      }
+      return nextPlay;
+    });
+  }, []);
+  const handleSeek = useCallback((t: number) => {
+    const clampedTime = Math.max(0, Math.min(duration - 0.1, t));
+    setCurrentTime(clampedTime);
+    
+    let idx = timings.findIndex(s => s.audioStart <= clampedTime && s.audioEnd > clampedTime);
+    if (idx === -1) idx = timings.findIndex(s => s.audioStart >= clampedTime);
+    if (idx !== -1) setActiveSentenceIdx(idx);
+  }, [duration, timings]);
+
+  const handleSkipBack = useCallback(() => {
+    setActiveSentenceIdx(prev => {
+      const nextIdx = Math.max(0, prev - 1);
+      setCurrentTime(timings[nextIdx]?.audioStart || 0);
+      return nextIdx;
+    });
+  }, [timings]);
+
+  const handleSkipForward = useCallback(() => {
+    setActiveSentenceIdx(prev => {
+      const nextIdx = Math.min(timings.length - 1, prev + 1);
+      setCurrentTime(timings[nextIdx]?.audioStart || 0);
+      return nextIdx;
+    });
+  }, [timings]);
 
   const handleSelectBook = useCallback((book: Book) => {
-    setActiveBook(book); setView("reader"); setSidebarOpen(false);
+    setActiveBook(book);
+
+    // Fetch local PDF blob if available
+    getPdfBlob(book.id).then(blob => {
+      if (blob) {
+        setActivePdfUrl(URL.createObjectURL(blob));
+      } else {
+        setActivePdfUrl(null);
+      }
+    });
+
+    // Load book state from library
+    try {
+      const saved = localStorage.getItem("makeshift_library_v3");
+      if (saved) {
+        const data = JSON.parse(saved);
+        const bookState = data.bookData?.[book.id];
+        if (bookState) {
+          setTimings(bookState.timings || []);
+          setDuration(bookState.duration || 0);
+          setJobResult(bookState.jobResult || null);
+          setCurrentTime(bookState.currentTime || 0);
+
+          if (bookState.activeSentenceIdx !== undefined) {
+             setActiveSentenceIdx(bookState.activeSentenceIdx);
+          } else if (bookState.timings && bookState.timings.length > 0) {
+             // Fallback recovery if they have old format data without activeSentenceIdx saved
+             const ct = bookState.currentTime || 0;
+             let idx = bookState.timings.findIndex((s: any) => s.audioStart <= ct && s.audioEnd > ct);
+             if (idx === -1) idx = bookState.timings.findIndex((s: any) => s.audioStart >= ct);
+             setActiveSentenceIdx(idx !== -1 ? idx : 0);
+          } else {
+             setActiveSentenceIdx(0);
+          }
+        } else {
+          // Reset if no saved state
+          setTimings([]);
+          setDuration(0);
+          setJobResult(null);
+          setCurrentTime(0);
+          setActiveSentenceIdx(0);
+        }
+      }
+    } catch {}
+
+    setView("reader");
+    setSidebarOpen(false);
   }, []);
+
   const handleDeleteBook = useCallback((id: string) => {
     setBooks((prev) => prev.filter((b) => b.id !== id));
-    if (activeBook?.id === id) { setActiveBook(null); setView("landing"); }
+
+    // Clean up local storage data
+    try {
+      const saved = localStorage.getItem("makeshift_library_v3");
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.bookData?.[id]) {
+           delete data.bookData[id];
+        }
+        if (data.books) {
+           data.books = data.books.filter((b: Book) => b.id !== id);
+        }
+        localStorage.setItem("makeshift_library_v3", JSON.stringify(data));
+      }
+      // Also purge raw file from IndexedDB
+      deletePdfBlob(id).catch(console.error);
+    } catch {}
+
+    if (activeBook?.id === id) {
+      setActiveBook(null);
+      setView("landing");
+    }
   }, [activeBook]);
 
   const displayBook = activeBook ?? books[0] ?? null;
@@ -166,7 +480,7 @@ export default function HomePage() {
       overflow: "hidden", fontFamily: "var(--font-sans)",
       display: "flex", flexDirection: "column",
     }}>
-      {/* ── Background — plain, no vignette ─────────────────── */}
+      {/* ── Background with subtle gradient overlay ─────────── */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
         <Image
           src="/bg.png?v=2"
@@ -177,6 +491,10 @@ export default function HomePage() {
           quality={90}
           unoptimized
         />
+        {/* Minimal gradient dim */}
+        <div className="bg-dim-overlay" />
+        {/* Film grain texture */}
+        <div className="bg-grain-overlay" />
       </div>
 
       {/* ── Top bar ─────────────────────────────────────────── */}
@@ -187,31 +505,75 @@ export default function HomePage() {
         pointerEvents: "none",
       }}>
         {/* Logo — left */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--clr-accent)">
-            <circle cx="8" cy="16" r="3.5" fill="rgba(255,255,255,0.9)"/>
-            <circle cx="16" cy="16" r="3.5" fill="rgba(255,255,255,0.9)"/>
-            <circle cx="12" cy="8" r="3.5" fill="var(--clr-accent)"/>
-          </svg>
-          <span style={{
-            fontSize: 20, fontWeight: 600,
-            color: "#fff",
-            textShadow: "0 1px 8px rgba(0,0,0,0.4)",
-            pointerEvents: "none",
-            letterSpacing: "0.01em",
-          }}>
-            MakeShift Audio
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, pointerEvents: "auto" }}>
+          {view === "reader" ? (
+            <span style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 18,
+              fontWeight: 700,
+              color: "#fff",
+              letterSpacing: "0.02em",
+            }}>
+              {time.split(":").map((part, i, arr) => (
+                <React.Fragment key={i}>
+                  {part}
+                  {i < arr.length - 1 && <span className="animate-blink">:</span>}
+                </React.Fragment>
+              ))}
+            </span>
+          ) : (
+            <>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--clr-accent)">
+                <circle cx="8" cy="16" r="3.5" fill="rgba(255,255,255,0.9)"/>
+                <circle cx="16" cy="16" r="3.5" fill="rgba(255,255,255,0.9)"/>
+                <circle cx="12" cy="8" r="3.5" fill="var(--clr-accent)"/>
+              </svg>
+              <button
+                onClick={() => {
+                  setView("landing");
+                  setIsPlaying(false);
+                }}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 20, fontWeight: 600,
+                  color: "#fff",
+                  textShadow: "0 1px 8px rgba(0,0,0,0.4)",
+                  letterSpacing: "0.01em",
+                  padding: 0,
+                  fontFamily: "inherit"
+                }}
+              >
+                MakeShift Audio
+              </button>
+            </>
+          )}
         </div>
 
         {/* Right buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, pointerEvents: "auto" }}>
+          {view === "reader" && (
+            <PillButton
+              id="btn-go-home"
+              onClick={() => {
+                setView("landing");
+                setIsPlaying(false);
+                window.speechSynthesis.cancel();
+              }}
+              icon={
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+              }
+              label="Home"
+            />
+          )}
           <PillButton id="btn-open-library" onClick={() => setSidebarOpen(true)} icon={libraryIcon} label="Library" />
         </div>
       </header>
 
       {/* ── Main content ────────────────────────────────────── */}
-      <main style={{
+      <main className="landing-main" style={{
         position: "relative", zIndex: 10, flex: 1,
         display: "flex", flexDirection: "column",
         alignItems: "flex-start", justifyContent: "center",
@@ -226,7 +588,7 @@ export default function HomePage() {
             width: "100%", maxWidth: 640,
           }}>
             {/* Hero text */}
-            <div>
+            <div className="landing-hero-text">
               <h1 style={{
                 fontFamily: "var(--font-sans)",
                 fontSize: "clamp(3rem, 5.5vw, 4.5rem)",
@@ -250,7 +612,7 @@ export default function HomePage() {
 
 
             {/* Upload zone */}
-            <div style={{ position: "relative", display: "flex", justifyContent: "flex-start", width: "100%", marginTop: 8 }}>
+            <div className="landing-upload-wrapper" style={{ position: "relative", display: "flex", justifyContent: "flex-start", width: "100%", marginTop: 8 }}>
               <UploadZone onFileSelect={handleFileSelect} />
             </div>
 
@@ -292,60 +654,92 @@ export default function HomePage() {
           </div>
         ) : (
           /* ── READER ───────────────────────────────────────── */
-          <div style={{
-            display: "flex", flexDirection: "column", alignItems: "center",
-            gap: 16, marginBottom: 140,
-            animation: "fadeIn 0.6s ease both",
-          }}>
+          <div className={`main-reader-content ${readerPanelOpen ? "panel-open" : ""} ${showPdfView && activePdfUrl ? "pdf-open" : ""}`}>
             <h1 style={{
               fontFamily: "var(--font-display)",
-              fontSize: "clamp(4rem, 10vw, 9rem)",
+              fontSize: readerPanelOpen
+                ? "clamp(1.5rem, 3vw, 2.5rem)"
+                : (showPdfView && activePdfUrl)
+                  ? "clamp(2rem, 4vw, 3rem)"
+                  : "clamp(3rem, 7vw, 6rem)",
               fontWeight: 700, lineHeight: 1.0,
               letterSpacing: "-0.02em",
-              color: "#fff", textAlign: "center",
+              color: "#fff",
+              textAlign: "center",
               textShadow: "0 4px 48px rgba(0,0,0,0.5)",
               maxWidth: "88vw",
+              transition: "font-size 0.4s ease",
             }}>
-              {displayBook?.title ?? "Untitled"}
+              {displayBook?.title || "Untitled"}
             </h1>
             <p style={{ fontSize: 15, color: "rgba(255,255,255,0.65)", fontWeight: 500,
               textShadow: "0 1px 8px rgba(0,0,0,0.5)" }}>
-              {displayBook?.author ?? "Unknown Author"}
+              {displayBook?.author || "MakeShift Audio"}
             </p>
 
-            {/* Phase 2 placeholder */}
-            <div style={{ position: "relative", display: "inline-flex" }}>
-              <div className="liquid-glass" style={{ borderRadius: 99 }}>
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: "9px 20px",
-                  fontSize: 12, color: "rgba(255,255,255,0.8)",
-                  whiteSpace: "nowrap",
-                }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  PDF viewer coming in Phase 2 · player controls are live ↓
+            {/* Status indicator */}
+            {timings.length > 0 && (
+              <div style={{ position: "relative", display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+                <div className="liquid-glass" style={{ borderRadius: 99 }}>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "9px 20px",
+                    fontSize: 12, color: "rgba(255,255,255,0.8)",
+                    whiteSpace: "nowrap",
+                  }}>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80" }} />
+                    {timings.length} sentences ready · {Math.round(duration)}s audio
+                  </div>
                 </div>
+
+                {/* PDF Viewer Toggle */}
+                {activePdfUrl && (
+                  <button
+                    onClick={() => setShowPdfView(v => !v)}
+                    style={{
+                      padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(255,255,255,0.1)",
+                      background: "rgba(0,0,0,0.3)", color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer",
+                      transition: "all 0.2s ease"
+                    }}
+                    className="hover:bg-white/10 hover:text-white"
+                  >
+                    {showPdfView ? "Hide PDF Viewer" : "Show PDF Viewer"}
+                  </button>
+                )}
               </div>
-            </div>
+            )}
+
+            {/* PDF Viewer */}
+            <motion.div
+              initial={false}
+              animate={showPdfView && activePdfUrl ? "open" : "closed"}
+              variants={{
+                open: { opacity: 1, height: "45vh", y: 0, filter: "blur(0px)", marginTop: 24, pointerEvents: "auto" },
+                closed: { opacity: 0, height: 0, y: 10, filter: "blur(10px)", marginTop: 0, pointerEvents: "none" }
+              }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className={`pdf-viewer-container ${readerPanelOpen ? "panel-open" : ""}`}
+              style={{}}>
+              {activePdfUrl && (
+                <iframe
+                  src={`${activePdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                  title="PDF Document Viewer"
+                />
+              )}
+            </motion.div>
           </div>
         )}
       </main>
 
       {/* ── Audio Player Bar ─────────────────────────────────── */}
       {view === "reader" && displayBook && (
-        <div style={{
-          position: "absolute", bottom: 36, left: 0, right: 0, zIndex: 20,
-          display: "flex", justifyContent: "center",
-          animation: "fadeIn 0.5s 0.1s ease both",
-        }}>
+        <div className={`audio-bar-wrapper ${readerPanelOpen ? "panel-open" : ""}`}>
           <div style={{ position: "relative", display: "inline-flex" }}>
             <AudioPlayerBar
               title={displayBook.title}
               author={displayBook.author}
+              coverAccent={displayBook.coverAccent}
               duration={duration}
               isPlaying={isPlaying}
               currentTime={currentTime}
@@ -355,9 +749,26 @@ export default function HomePage() {
               onSkipBack={handleSkipBack}
               onSkipForward={handleSkipForward}
               onRateChange={setPlaybackRate}
+              readerPanelOpen={readerPanelOpen}
+              onToggleReader={() => setReaderPanelOpen(v => !v)}
+              activePdfUrl={activePdfUrl}
             />
           </div>
         </div>
+      )}
+
+      {/* ── Reader Panel ─────────────────────────────────────── */}
+      {view === "reader" && displayBook && (
+        <ReaderPanel
+          isOpen={readerPanelOpen}
+          bookTitle={displayBook.title}
+          timings={timings}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
+          onClose={() => setReaderPanelOpen(false)}
+          onSeekToSentence={(t) => setCurrentTime(t)}
+          onTogglePlay={handlePlayPause}
+        />
       )}
 
       {/* ── Library sidebar ──────────────────────────────────── */}
@@ -376,11 +787,9 @@ export default function HomePage() {
           stage={processingStage}
           progress={processingProgress}
           fileName={pendingFileName}
-          onComplete={handleProcessingComplete}
+          onComplete={() => {}}
         />
       )}
-
-      <audio ref={audioRef} />
     </div>
   );
 }
