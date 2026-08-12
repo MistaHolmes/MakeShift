@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MakeShift Audio - Synchronized PDF Reader",
+  title: "MakeShift Audio",
   description:
     "Upload any PDF and listen to it as a high-quality audiobook with real-time synchronized text highlighting.",
   keywords: ["PDF audiobook", "synchronized reader", "text-to-speech", "ElevenLabs"],

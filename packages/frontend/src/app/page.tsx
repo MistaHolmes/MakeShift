@@ -9,6 +9,8 @@ import AudioPlayerBar from "@/components/AudioPlayerBar";
 import LibrarySidebar, { type Book } from "@/components/LibrarySidebar";
 import ProcessingOverlay, { type ProcessingStage } from "@/components/ProcessingOverlay";
 import ReaderPanel, { type SentenceTiming } from "@/components/ReaderPanel";
+import SettingsModal from "@/components/SettingsModal";
+import BGMPlayer from "@/components/BGMPlayer";
 import { savePdfBlob, getPdfBlob, deletePdfBlob } from "@/lib/storage/db";
 
 
@@ -41,11 +43,11 @@ function PillButton({ id, onClick, icon, label }: {
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
             padding: "8px 24px", border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 99,
             background: "rgba(255,255,255,0.1)", cursor: "pointer",
             fontSize: 13, fontWeight: 600, color: "#fff",
             fontFamily: "inherit", whiteSpace: "nowrap",
             outline: "none",
-            borderRadius: 99,
           }}
         >
           {icon}
@@ -83,6 +85,37 @@ export default function HomePage() {
 
   const [isPlaying, setIsPlaying]           = useState(false);
   const [playbackRate, setPlaybackRate]     = useState(1);
+
+  const [settingsOpen, setSettingsOpen]     = useState(false);
+  const [themeColor, setThemeColor]         = useState("#e8b86d");
+  const [grainOpacity, setGrainOpacity]     = useState(0.14);
+  const [bgImage, setBgImage]               = useState("/bg.png");
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Restore settings on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("makeshift_settings");
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.themeColor) setThemeColor(data.themeColor);
+        if (typeof data.grainOpacity === "number") setGrainOpacity(data.grainOpacity);
+        if (data.bgImage) setBgImage(data.bgImage);
+      }
+    } catch {}
+    setSettingsLoaded(true);
+  }, []);
+
+  // Apply CSS vars and save to local storage when settings change
+  useEffect(() => {
+    if (!settingsLoaded) return; // wait until we've loaded from localStorage
+    document.documentElement.style.setProperty("--clr-accent", themeColor);
+    document.documentElement.style.setProperty("--clr-accent-dim", themeColor + "d9");
+    document.documentElement.style.setProperty("--grain-opacity", grainOpacity.toString());
+    try {
+      localStorage.setItem("makeshift_settings", JSON.stringify({ themeColor, grainOpacity, bgImage }));
+    } catch {}
+  }, [themeColor, grainOpacity, bgImage, settingsLoaded]);
 
   // We use a ref to track the latest book data so we can save it on unmount/tick without frequent re-renders
   const stateRef = useRef({ activeBook, timings, duration, jobResult, currentTime, books, activeSentenceIdx });
@@ -483,7 +516,7 @@ export default function HomePage() {
       {/* ── Background with subtle gradient overlay ─────────── */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
         <Image
-          src="/bg.png?v=2"
+          src={`${bgImage}?v=2`}
           alt="Background"
           fill
           style={{ objectFit: "cover" }}
@@ -639,6 +672,7 @@ export default function HomePage() {
                           style={{
                             display: "flex", alignItems: "center", justifyContent: "center",
                             padding: "9px 20px", border: "none",
+                            borderRadius: 99,
                             background: "rgba(255,255,255,0.15)", cursor: "pointer",
                             fontSize: 13, fontWeight: 600, color: "#fff",
                             fontFamily: "inherit", whiteSpace: "nowrap",
@@ -792,6 +826,39 @@ export default function HomePage() {
           onComplete={() => {}}
         />
       )}
+
+      {/* ── Settings Button & Modal ──────────────────────────── */}
+      <button
+        onClick={() => setSettingsOpen(true)}
+        className="liquid-glass hover:scale-110 active:scale-95 transition-all duration-200"
+        style={{
+          position: "fixed", bottom: 20, left: 20, zIndex: 40,
+          width: 48, height: 48, borderRadius: "50%",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(255,255,255,0.05)", cursor: "pointer",
+          border: "1px solid rgba(255,255,255,0.15)",
+          color: "rgba(255,255,255,0.7)"
+        }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        themeColor={themeColor}
+        setThemeColor={setThemeColor}
+        grainOpacity={grainOpacity}
+        setGrainOpacity={setGrainOpacity}
+        bgImage={bgImage}
+        setBgImage={setBgImage}
+      />
+
+      {/* ── Background Music Player (Landing Only) ────────────── */}
+      {view === "landing" && <BGMPlayer />}
     </div>
   );
 }
