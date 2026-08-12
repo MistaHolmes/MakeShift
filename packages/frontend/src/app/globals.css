@@ -340,7 +340,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   padding-right: min(500px, 42vw);
 }
 .main-reader-content.pdf-open {
-  transform: translate(-5vw, -6vh);
+  transform: translate(-2vw, -4vh);
 }
 
 .pdf-viewer-container {

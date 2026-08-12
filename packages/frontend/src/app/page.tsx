@@ -256,7 +256,7 @@ export default function HomePage() {
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPlayingRef = useRef(isPlaying);
-  
+
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
@@ -358,7 +358,7 @@ export default function HomePage() {
   const handleSeek = useCallback((t: number) => {
     const clampedTime = Math.max(0, Math.min(duration - 0.1, t));
     setCurrentTime(clampedTime);
-    
+
     let idx = timings.findIndex(s => s.audioStart <= clampedTime && s.audioEnd > clampedTime);
     if (idx === -1) idx = timings.findIndex(s => s.audioStart >= clampedTime);
     if (idx !== -1) setActiveSentenceIdx(idx);
@@ -660,10 +660,10 @@ export default function HomePage() {
             <h1 style={{
               fontFamily: "var(--font-display)",
               fontSize: readerPanelOpen
-                ? "clamp(1.5rem, 3vw, 2.5rem)"
+                ? "clamp(1.5rem, 4vw, 2.5rem)"
                 : (showPdfView && activePdfUrl)
                   ? "clamp(2rem, 4vw, 3rem)"
-                  : "clamp(3rem, 7vw, 6rem)",
+                  : "clamp(3rem, 4vw, 6rem)",
               fontWeight: 700, lineHeight: 1.0,
               letterSpacing: "-0.02em",
               color: "#fff",
