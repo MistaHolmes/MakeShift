@@ -1,8 +1,5 @@
 "use client";
 
-import React from "react";
-import LiquidGlass from "liquid-glass-react";
-
 export interface Book {
   id: string;
   title: string;
