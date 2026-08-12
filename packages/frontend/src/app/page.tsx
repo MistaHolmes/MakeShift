@@ -579,10 +579,12 @@ export default function HomePage() {
         alignItems: "flex-start", justifyContent: "center",
         paddingLeft: "6vw",
         paddingBottom: "8vh",
+        overflowY: "auto",
+        overflowX: "hidden",
       }}>
         {view === "landing" ? (
           /* ── LANDING ──────────────────────────────────────── */
-          <div style={{
+          <div className="landing-content" style={{
             display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 28,
             animation: "fadeIn 0.6s ease both",
             width: "100%", maxWidth: 640,

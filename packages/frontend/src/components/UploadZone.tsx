@@ -28,6 +28,7 @@ export default function UploadZone({ onFileSelect }: UploadZoneProps) {
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
+        className="upload-zone-container"
         style={{
           width: 500, padding: 32,
           background: "rgba(255,255,255,0.08)", borderRadius: 32,
@@ -37,7 +38,7 @@ export default function UploadZone({ onFileSelect }: UploadZoneProps) {
         {/* Dashed inner drop zone */}
         <div 
           onClick={() => document.getElementById("pdf-file-input")?.click()}
-          className={`cursor-pointer transition-all duration-200 hover:bg-white/5 hover:scale-[1.01] ${isDragOver ? "bg-white/5 border-white/60 scale-[1.02]" : "bg-transparent border-white/20"}`}
+          className={`upload-zone-inner cursor-pointer transition-all duration-200 hover:bg-white/5 hover:scale-[1.01] ${isDragOver ? "bg-white/5 border-white/60 scale-[1.02]" : "bg-transparent border-white/20"}`}
           style={{
             borderWidth: "1.5px", borderStyle: "dashed",
             borderColor: isDragOver ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.2)",

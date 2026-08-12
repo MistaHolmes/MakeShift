@@ -412,8 +412,13 @@ input[type="range"]:hover::-webkit-slider-thumb {
   .landing-main {
     padding-left: 6vw !important;
     padding-right: 6vw !important;
+    padding-top: 4vh !important;
     align-items: center !important;
     text-align: center !important;
+    justify-content: flex-start !important;
+  }
+  .landing-content {
+    align-items: center !important;
   }
   .landing-hero-text p {
     margin-left: auto;
