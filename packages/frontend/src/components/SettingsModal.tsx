@@ -2,6 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 
+export const PLAYLIST_PRESETS = [
+  { id: "jazzish", name: "Chill (Jazzish)", playlistId: "PLk4TWo67UoXhMcfG-af8ZXFlBdGr_NKkH" },
+  { id: "chill", name: "Chill", playlistId: "PLk4TWo67UoXhxOnDzacJrEoPX7bCQx8rk" },
+  { id: "hindi", name: "Chill (Hindi)", playlistId: "PLk4TWo67UoXiqGe2zqqQsKG9-Pgyt1T3x" },
+  { id: "japanese", name: "Japanese", playlistId: "PLk4TWo67UoXjaEg28AAeXmkrD6pZBf4aA" },
+];
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -11,6 +18,8 @@ interface SettingsModalProps {
   setGrainOpacity: (o: number) => void;
   bgImage: string;
   setBgImage: (bg: string) => void;
+  bgmPlaylist: string;
+  setBgmPlaylist: (pl: string) => void;
 }
 
 const PRESET_THEMES = [
@@ -31,7 +40,7 @@ const PRESET_BACKGROUNDS = [
 ];
 
 export default function SettingsModal({
-  isOpen, onClose, themeColor, setThemeColor, grainOpacity, setGrainOpacity, bgImage, setBgImage
+  isOpen, onClose, themeColor, setThemeColor, grainOpacity, setGrainOpacity, bgImage, setBgImage, bgmPlaylist, setBgmPlaylist
 }: SettingsModalProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -47,8 +56,8 @@ export default function SettingsModal({
     }}>
       <div className="liquid-glass" style={{
         position: "relative",
-        width: 480, maxWidth: "90vw",
-        background: "rgba(16,14,12,0.9)",
+        width: 500, maxWidth: "90vw",
+        background: "rgba(16,14,12,0.92)",
         borderRadius: 24, padding: "32px 28px",
         boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
         animation: "fadeUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) both"
@@ -70,6 +79,32 @@ export default function SettingsModal({
         </button>
 
         <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, fontFamily: "var(--font-display)" }}>Settings</h2>
+
+        {/* Playlist Section */}
+        <div style={{ marginBottom: 24 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.7)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 12 }}>
+            Music Playlist
+          </h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {PLAYLIST_PRESETS.map(pl => (
+              <button
+                key={pl.id}
+                onClick={() => setBgmPlaylist(pl.playlistId)}
+                style={{
+                  padding: "8px 16px", borderRadius: 99,
+                  background: bgmPlaylist === pl.playlistId ? "var(--clr-accent)" : "rgba(255,255,255,0.1)",
+                  color: bgmPlaylist === pl.playlistId ? "#000" : "#fff",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+                className="hover:scale-105 active:scale-95"
+              >
+                {pl.name}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Background Section */}
         <div style={{ marginBottom: 24 }}>

@@ -9,7 +9,7 @@ declare global {
   }
 }
 
-const PLAYLIST_ID = "PLk4TWo67UoXhMcfG-af8ZXFlBdGr_NKkH";
+const DEFAULT_PLAYLIST_ID = "PLk4TWo67UoXhMcfG-af8ZXFlBdGr_NKkH";
 
 const formatTime = (secs: number) => {
   if (isNaN(secs)) return "0:00";
@@ -18,14 +18,23 @@ const formatTime = (secs: number) => {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 };
 
-export default function BGMPlayer() {
-  const [expanded, setExpanded] = useState(false);
+interface BGMPlayerProps {
+  playlistId?: string;
+  centered?: boolean;
+}
+
+export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered = false }: BGMPlayerProps) {
+  const [expanded, setExpanded] = useState(centered);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [songTitle, setSongTitle] = useState("Loading music...");
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(1);
   const playerRef = useRef<any>(null);
+
+  useEffect(() => {
+    setExpanded(centered);
+  }, [centered]);
 
   useEffect(() => {
     let interval: any;
@@ -40,6 +49,36 @@ export default function BGMPlayer() {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
+  const playlistIdRef = useRef(playlistId);
+  const activeLoadedPlaylistRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    playlistIdRef.current = playlistId;
+    if (playerRef.current && playerRef.current.loadPlaylist && activeLoadedPlaylistRef.current !== playlistId) {
+      activeLoadedPlaylistRef.current = playlistId;
+      try {
+        playerRef.current.loadPlaylist({
+          listType: "playlist",
+          list: playlistId,
+          index: 0,
+        });
+        playerRef.current.setShuffle(true);
+        setTimeout(() => {
+          if (playerRef.current && playerRef.current.getPlaylist) {
+            const playlist = playerRef.current.getPlaylist();
+            if (playlist && playlist.length > 0) {
+              const randomIdx = Math.floor(Math.random() * playlist.length);
+              playerRef.current.playVideoAt(randomIdx);
+            }
+          }
+          updateVideoData();
+        }, 600);
+      } catch (err) {
+        console.error("Error updating playlist:", err);
+      }
+    }
+  }, [playlistId]);
+
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement("script");
@@ -53,12 +92,13 @@ export default function BGMPlayer() {
     }
 
     const initPlayer = () => {
+      const targetPlaylist = playlistIdRef.current;
       playerRef.current = new window.YT.Player("bgm-yt-player", {
         height: "1",
         width: "1",
         playerVars: {
           listType: "playlist",
-          list: PLAYLIST_ID,
+          list: targetPlaylist,
           autoplay: 1,
           controls: 0,
           disablekb: 1,
@@ -66,17 +106,23 @@ export default function BGMPlayer() {
         events: {
           onReady: (event: any) => {
             const player = event.target;
-            player.setShuffle(true);
-            const playlist = player.getPlaylist();
-            if (playlist && playlist.length > 0) {
-              const randomIdx = Math.floor(Math.random() * playlist.length);
-              player.playVideoAt(randomIdx);
-              setTimeout(() => {
-                updateVideoData();
-              }, 300);
-            } else {
-              updateVideoData();
+            activeLoadedPlaylistRef.current = playlistIdRef.current;
+            if (playlistIdRef.current !== targetPlaylist && player.loadPlaylist) {
+              player.loadPlaylist({
+                listType: "playlist",
+                list: playlistIdRef.current,
+                index: 0,
+              });
             }
+            player.setShuffle(true);
+            setTimeout(() => {
+              const playlist = player.getPlaylist();
+              if (playlist && playlist.length > 0) {
+                const randomIdx = Math.floor(Math.random() * playlist.length);
+                player.playVideoAt(randomIdx);
+              }
+              updateVideoData();
+            }, 500);
           },
           onStateChange: (event: any) => {
             if (event.data === window.YT.PlayerState.PLAYING) {
@@ -149,8 +195,13 @@ export default function BGMPlayer() {
 
   return (
     <div style={{
-      position: "fixed", bottom: 40, right: "6vw", zIndex: 40,
+      position: "fixed", bottom: 40, 
+      right: centered ? "auto" : "6vw",
+      left: centered ? "50%" : "auto",
+      transform: centered ? "translateX(-50%)" : "none",
+      zIndex: 40,
       display: "flex", alignItems: "flex-end", justifyContent: "flex-end",
+      transition: "all 0.5s cubic-bezier(0.22, 1, 0.36, 1)"
     }}>
       {/* Hidden container for YT iframe */}
       <div id="bgm-yt-player" style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />

@@ -58,6 +58,19 @@ function PillButton({ id, onClick, icon, label }: {
   );
 }
 
+const HINDI_PHRASES = [
+  { line1: "असीम", line2: "शांति" },
+  { line1: "सुहाना", line2: "सफर" },
+  { line1: "डीलक्स", line2: "सैलून" },
+  { line1: "लोफ़ी", line2: "धुन" },
+  { line1: "धीमी", line2: "हवा" },
+  { line1: "सुनहरा", line2: "पल" },
+  { line1: "रूहानी", line2: "सफर" },
+  { line1: "मीठे", line2: "तराने" },
+  { line1: "शांत", line2: "शाम" },
+  { line1: "अनकही", line2: "बातें" },
+];
+
 /* ── App ────────────────────────────────────────────────────── */
 type AppView = "landing" | "reader";
 
@@ -90,7 +103,10 @@ export default function HomePage() {
   const [themeColor, setThemeColor]         = useState("#e8b86d");
   const [grainOpacity, setGrainOpacity]     = useState(0.14);
   const [bgImage, setBgImage]               = useState("/bg.png");
+  const [bgmPlaylist, setBgmPlaylist]       = useState("PLk4TWo67UoXhMcfG-af8ZXFlBdGr_NKkH");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [landingMode, setLandingMode]       = useState<"default" | "music">("default");
+  const [hindiPhrase]                       = useState(() => HINDI_PHRASES[Math.floor(Math.random() * HINDI_PHRASES.length)]);
 
   // Restore settings on mount
   useEffect(() => {
@@ -101,6 +117,7 @@ export default function HomePage() {
         if (data.themeColor) setThemeColor(data.themeColor);
         if (typeof data.grainOpacity === "number") setGrainOpacity(data.grainOpacity);
         if (data.bgImage) setBgImage(data.bgImage);
+        if (data.bgmPlaylist) setBgmPlaylist(data.bgmPlaylist);
       }
     } catch {}
     setSettingsLoaded(true);
@@ -113,9 +130,9 @@ export default function HomePage() {
     document.documentElement.style.setProperty("--clr-accent-dim", themeColor + "d9");
     document.documentElement.style.setProperty("--grain-opacity", grainOpacity.toString());
     try {
-      localStorage.setItem("makeshift_settings", JSON.stringify({ themeColor, grainOpacity, bgImage }));
+      localStorage.setItem("makeshift_settings", JSON.stringify({ themeColor, grainOpacity, bgImage, bgmPlaylist }));
     } catch {}
-  }, [themeColor, grainOpacity, bgImage, settingsLoaded]);
+  }, [themeColor, grainOpacity, bgImage, bgmPlaylist, settingsLoaded]);
 
   // We use a ref to track the latest book data so we can save it on unmount/tick without frequent re-renders
   const stateRef = useRef({ activeBook, timings, duration, jobResult, currentTime, books, activeSentenceIdx });
@@ -537,9 +554,9 @@ export default function HomePage() {
         padding: "36px 6vw",
         pointerEvents: "none",
       }}>
-        {/* Logo — left */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, pointerEvents: "auto" }}>
-          {view === "reader" ? (
+        {/* Left */}
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, pointerEvents: "auto", justifyContent: "flex-start" }}>
+          {(view === "reader" || (view === "landing" && landingMode === "music")) ? (
             <span style={{
               fontFamily: "var(--font-display)",
               fontSize: 18,
@@ -582,8 +599,27 @@ export default function HomePage() {
           )}
         </div>
 
+        {/* Center: View Change Toggle (Landing Only) */}
+        {view === "landing" && (
+          <div style={{ flex: 1, display: "flex", justifyContent: "center", pointerEvents: "auto" }}>
+            <PillButton
+              id="btn-toggle-landing-mode"
+              onClick={() => setLandingMode(m => m === "default" ? "music" : "default")}
+              icon={
+                landingMode === "default" ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                )
+              }
+              label={landingMode === "default" ? "Music View" : "Reader View"}
+            />
+          </div>
+        )}
+        {view === "reader" && <div style={{ flex: 1 }} />}
+
         {/* Right buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, pointerEvents: "auto" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, pointerEvents: "auto", justifyContent: "flex-end" }}>
           {view === "reader" && (
             <PillButton
               id="btn-go-home"
@@ -601,7 +637,18 @@ export default function HomePage() {
               label="Home"
             />
           )}
-          <PillButton id="btn-open-library" onClick={() => setSidebarOpen(true)} icon={libraryIcon} label="Library" />
+          {view === "landing" && landingMode === "music" ? (
+            <PillButton
+              id="btn-yt-music"
+              onClick={() => window.open(`https://music.youtube.com/playlist?list=${bgmPlaylist}`, "_blank")}
+              icon={
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+              }
+              label="YT Music ↗"
+            />
+          ) : (
+            <PillButton id="btn-open-library" onClick={() => setSidebarOpen(true)} icon={libraryIcon} label="Library" />
+          )}
         </div>
       </header>
 
@@ -609,85 +656,104 @@ export default function HomePage() {
       <main className="landing-main" style={{
         position: "relative", zIndex: 10, flex: 1,
         display: "flex", flexDirection: "column",
-        alignItems: "flex-start", justifyContent: "center",
-        paddingLeft: "6vw",
-        paddingBottom: "8vh",
+        alignItems: landingMode === "music" ? "center" : "flex-start",
+        justifyContent: "center",
+        paddingLeft: landingMode === "music" ? 0 : "6vw",
+        paddingBottom: landingMode === "music" ? 0 : "8vh",
         overflowY: "auto",
         overflowX: "hidden",
       }}>
         {view === "landing" ? (
-          /* ── LANDING ──────────────────────────────────────── */
-          <div className="landing-content" style={{
-            display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 28,
-            animation: "fadeIn 0.6s ease both",
-            width: "100%", maxWidth: 640,
-          }}>
-            {/* Hero text */}
-            <div className="landing-hero-text">
+          landingMode === "music" ? (
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              width: "100%", height: "100%", paddingBottom: "35vh",
+              animation: "fadeUp 0.8s cubic-bezier(0.22,1,0.36,1) both"
+            }}>
               <h1 style={{
-                fontFamily: "var(--font-sans)",
-                fontSize: "clamp(3rem, 5.5vw, 4.5rem)",
-                fontWeight: 700, lineHeight: 1.15,
-                letterSpacing: "-0.03em", color: "#fff",
-                marginBottom: 20,
-                textShadow: "0 2px 24px rgba(0,0,0,0.6)",
+                fontSize: "clamp(7rem, 5vw, 4.5rem)", fontWeight: 800,
+                color: "#fff",
+                fontFamily: "var(--font-display)",
+                lineHeight: 1.2,
+                textShadow: "0 8px 32px rgba(0,0,0,0.7)",
+                textAlign: "center",
+                letterSpacing: "0.02em"
               }}>
-                Listen to your<br />
-                PDFs. <span style={{ color: "var(--clr-accent)" }}>Naturally.</span>
+                {hindiPhrase.line1}<br/>{hindiPhrase.line2}
               </h1>
-              <p style={{
-                fontSize: 16, color: "rgba(255,255,255,0.85)",
-                maxWidth: 480, lineHeight: 1.6,
-                fontWeight: 400,
-                textShadow: "0 1px 12px rgba(0,0,0,0.7)",
-              }}>
-                Upload any PDF and turn it into a synchronized audiobook. Follow along as we highlight every word, sentence, and idea.
-              </p>
             </div>
-
-
-            {/* Upload zone */}
-            <div className="landing-upload-wrapper" style={{ position: "relative", display: "flex", justifyContent: "flex-start", width: "100%", marginTop: 8 }}>
-              <UploadZone onFileSelect={handleFileSelect} />
-            </div>
-
-            {/* Recent books */}
-            {books.length > 0 && (
-              <div style={{
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
-                animation: "fadeUp 0.6s 0.2s cubic-bezier(0.22,1,0.36,1) both",
-              }}>
-                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", letterSpacing: "0.08em",
-                  textShadow: "0 1px 8px rgba(0,0,0,0.7)" }}>
-                  — continue reading —
+          ) : (
+            <div className="landing-content" style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 28,
+              animation: "fadeIn 0.6s ease both",
+              width: "100%", maxWidth: 640,
+            }}>
+              {/* Hero text */}
+              <div className="landing-hero-text">
+                <h1 style={{
+                  fontFamily: "var(--font-sans)",
+                  fontSize: "clamp(3rem, 5.5vw, 4.5rem)",
+                  fontWeight: 700, lineHeight: 1.15,
+                  letterSpacing: "-0.03em", color: "#fff",
+                  marginBottom: 20,
+                  textShadow: "0 2px 24px rgba(0,0,0,0.6)",
+                }}>
+                  Listen to your<br />
+                  PDFs. <span style={{ color: "var(--clr-accent)" }}>Naturally.</span>
+                </h1>
+                <p style={{
+                  fontSize: 16, color: "rgba(255,255,255,0.85)",
+                  maxWidth: 480, lineHeight: 1.6,
+                  fontWeight: 400,
+                  textShadow: "0 1px 12px rgba(0,0,0,0.7)",
+                }}>
+                  Upload any PDF and turn it into a synchronized audiobook. Follow along as we highlight every word, sentence, and idea.
                 </p>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                  {books.slice(0, 3).map((b) => (
-                    <div key={b.id} style={{ position: "relative", display: "inline-flex" }}>
-                      <div className="liquid-glass" style={{ borderRadius: 99 }}>
-                        <button
-                          id={`recent-book-${b.id}`}
-                          onClick={() => handleSelectBook(b)}
-                          className="hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-200"
-                          style={{
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            padding: "9px 20px", border: "none",
-                            borderRadius: 99,
-                            background: "rgba(255,255,255,0.15)", cursor: "pointer",
-                            fontSize: 13, fontWeight: 600, color: "#fff",
-                            fontFamily: "inherit", whiteSpace: "nowrap",
-                            outline: "none",
-                          }}
-                        >
-                          {b.title}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
-            )}
-          </div>
+
+              {/* Upload zone */}
+              <div className="landing-upload-wrapper" style={{ position: "relative", display: "flex", justifyContent: "flex-start", width: "100%", marginTop: 8 }}>
+                <UploadZone onFileSelect={handleFileSelect} />
+              </div>
+
+              {/* Recent books */}
+              {books.length > 0 && (
+                <div style={{
+                  display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 14,
+                  animation: "fadeUp 0.6s 0.2s cubic-bezier(0.22,1,0.36,1) both",
+                }}>
+                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", letterSpacing: "0.08em",
+                    textShadow: "0 1px 8px rgba(0,0,0,0.7)" }}>
+                    — continue reading —
+                  </p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-start" }}>
+                    {books.slice(0, 3).map((b) => (
+                      <div key={b.id} style={{ position: "relative", display: "inline-flex" }}>
+                        <div className="liquid-glass" style={{ borderRadius: 99 }}>
+                          <button
+                            id={`recent-book-${b.id}`}
+                            onClick={() => handleSelectBook(b)}
+                            className="hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-200"
+                            style={{
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              padding: "9px 20px", border: "1px solid rgba(255,255,255,0.1)",
+                              borderRadius: 99,
+                              background: "rgba(255,255,255,0.15)", cursor: "pointer",
+                              fontSize: 13, fontWeight: 600, color: "#fff",
+                              fontFamily: "inherit", whiteSpace: "nowrap",
+                              outline: "none",
+                            }}
+                          >
+                            {b.title}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
         ) : (
           /* ── READER ───────────────────────────────────────── */
           <div className={`main-reader-content ${readerPanelOpen ? "panel-open" : ""} ${showPdfView && activePdfUrl ? "pdf-open" : ""}`}>
@@ -855,10 +921,12 @@ export default function HomePage() {
         setGrainOpacity={setGrainOpacity}
         bgImage={bgImage}
         setBgImage={setBgImage}
+        bgmPlaylist={bgmPlaylist}
+        setBgmPlaylist={setBgmPlaylist}
       />
 
       {/* ── Background Music Player (Landing Only) ────────────── */}
-      {view === "landing" && <BGMPlayer />}
+      {view === "landing" && <BGMPlayer playlistId={bgmPlaylist} centered={landingMode === "music"} />}
     </div>
   );
 }
