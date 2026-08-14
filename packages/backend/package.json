@@ -4,17 +4,30 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "bdev": "bun run --hot index.ts"
+    "dev": "bun run --hot index.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.2.0"
+    "@types/multer": "^2.2.0",
+    "@types/node": "^26.2.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.21.0",
+    "prisma": "^7.9.1"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "@aws-sdk/client-s3": "^3.1110.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "@prisma/client-runtime-utils": "^7.9.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "multer": "^2.2.0",
+    "pdf-parse": "1.1.1",
+    "pg": "^8.23.0"
   }
 }

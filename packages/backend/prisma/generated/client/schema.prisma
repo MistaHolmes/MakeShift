@@ -1,0 +1,48 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Document {
+  id        String    @id @default(cuid())
+  title     String
+  filename  String
+  status    DocStatus @default(UPLOADED)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  pages Page[]
+}
+
+model Page {
+  id            String     @id @default(cuid())
+  documentId    String
+  pageNumber    Int
+  textContent   String
+  audioUrl      String? // URL to the stored MP3 in S3/R2
+  alignmentData Json? // ElevenLabs timestamps: { chars: [], start_times: [], end_times: [] }
+  status        PageStatus @default(PENDING)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+enum DocStatus {
+  UPLOADED
+  PARSING
+  GENERATING_AUDIO
+  READY
+  ERROR
+}
+
+enum PageStatus {
+  PENDING
+  GENERATED
+  ERROR
+}
