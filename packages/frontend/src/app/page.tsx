@@ -190,78 +190,80 @@ export default function HomePage() {
   const processFile = useCallback(async (file: File) => {
     setPendingFileName(file.name);
     setProcessing(true);
-    setProcessingStage("uploading");
-    setProcessingProgress(10);
-
+    
     try {
+      // 1. Upload & Parse
+      setProcessingStage("uploading");
+      setProcessingProgress(10);
+      
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("title", file.name.replace(/\.[^/.]+$/, ""));
+      formData.append("pdf", file);
 
-      const res = await fetch("/api/process", {
+      const backendUrl = `http://${window.location.hostname}:3001`;
+
+      const uploadRes = await fetch(`${backendUrl}/api/documents/upload`, {
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed");
+      if (!uploadRes.ok) throw new Error("Backend upload failed");
 
-      const { jobId } = await res.json();
+      const uploadData = await uploadRes.json();
+      const documentId = uploadData.documentId;
+      
+      // 2. Generate Audio (this might take time as it processes the whole book)
+      setProcessingStage("audio_generation" as any); // using any for stage as it might not be in the enum
+      setProcessingProgress(40);
+      
+      const genRes = await fetch(`${backendUrl}/api/documents/${documentId}/generate`, {
+        method: "POST",
+      });
+      if (!genRes.ok) throw new Error("Audio generation failed");
+      
+      // 3. Fetch all generated pages
+      setProcessingStage("ready" as any);
+      setProcessingProgress(90);
+      
+      const pagesRes = await fetch(`${backendUrl}/api/documents/${documentId}/pages`);
+      if (!pagesRes.ok) throw new Error("Failed to fetch generated pages");
+      
+      const pagesData = await pagesRes.json();
+      
+      // Convert backend pages format to frontend timings format
+      // We'll treat each page as a single 'SentenceTiming' for now to get it playing
+      // In the future, we can map alignmentData into exact word boundaries!
+      let currentStartTime = 0;
+      const combinedTimings: SentenceTiming[] = [];
+      let totalDuration = 0;
+      
+      for (const page of pagesData) {
+        if (!page.audioUrl || !page.alignmentData) continue;
+        
+        // Calculate page duration using the last character's end time (convert ms to seconds)
+        const times = page.alignmentData.character_end_times_ms;
+        const pageDuration = times && times.length > 0 ? times[times.length - 1] / 1000 : 0;
+        
+        combinedTimings.push({
+          text: page.textContent,
+          audioStart: currentStartTime,
+          audioEnd: currentStartTime + pageDuration,
+          // We can stash the audio URL here so our player knows what to play!
+          audioUrl: page.audioUrl 
+        } as any);
+        
+        currentStartTime += pageDuration;
+        totalDuration += pageDuration;
+      }
 
-      // Poll for status
-      const poll = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`/api/jobs/${jobId}`);
-          if (!statusRes.ok) throw new Error("Polling failed");
-          const job = await statusRes.json();
-
-          if (job.status === "error") {
-            clearInterval(poll);
-            alert("Error processing PDF: " + job.error);
-            setProcessing(false);
-          } else {
-            setProcessingStage(job.status);
-            setProcessingProgress(job.progress);
-
-              if (job.status === "ready") {
-              clearInterval(poll);
-              setProcessingProgress(100);
-
-              // Fetch alignment data and populate timings
-              if (job.result?.alignmentData) {
-                setJobResult(job.result);
-                setTimings(job.result.alignmentData.timings || []);
-                setDuration(job.result.alignmentData.totalDuration || 0);
-                setCurrentTime(0);
-                setActiveSentenceIdx(0);
-                handleProcessingComplete(job.result, file);
-              } else if (job.result?.alignmentUrl) {
-                fetch(job.result.alignmentUrl)
-                  .then(r => r.json())
-                  .then(alignment => {
-                    const completeResult = {
-                      ...job.result,
-                      alignmentData: alignment
-                    };
-                    setJobResult(completeResult);
-                    setTimings(alignment.timings || []);
-                    setDuration(alignment.totalDuration || 0);
-                    setCurrentTime(0);
-                    setActiveSentenceIdx(0);
-
-                    // Trigger completion
-                    handleProcessingComplete(completeResult, file);
-                  })
-                  .catch(console.error);
-              } else {
-                 handleProcessingComplete(job.result, file);
-              }
-            }
-          }
-        } catch (e) {
-          clearInterval(poll);
-          alert("Error checking status");
-          setProcessing(false);
-        }
-      }, 1500);
+      setProcessingProgress(100);
+      
+      const fakeJobResult = { pageCount: pagesData.length };
+      setJobResult(fakeJobResult);
+      setTimings(combinedTimings);
+      setDuration(totalDuration);
+      setCurrentTime(0);
+      setActiveSentenceIdx(0);
+      
+      handleProcessingComplete(fakeJobResult, file);
 
     } catch (e: any) {
       alert("Error: " + e.message);
@@ -302,122 +304,119 @@ export default function HomePage() {
     setReaderPanelOpen(true);
   }, [pendingFileName]);
 
-  /* ── Audio playback via Web Speech API ────────────────── */
-  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /* ── Audio playback via HTML5 Audio ────────────────── */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef(isPlaying);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  // Handle page transitions and audio source loading
   useEffect(() => {
-    window.speechSynthesis.cancel();
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      audioRef.current.preservesPitch = true;
+    }
+    
+    const audio = audioRef.current;
+    
     if (activeSentenceIdx >= timings.length) {
       setIsPlaying(false);
       return;
     }
 
-    // Ensure voices are loaded (sometimes required on first load)
-    window.speechSynthesis.getVoices();
-
-    if (activeSentenceIdx >= timings.length) {
+    const sentence = timings[activeSentenceIdx] as any;
+    if (!sentence || !sentence.audioUrl) {
       setIsPlaying(false);
       return;
     }
 
-    const sentence = timings[activeSentenceIdx];
-    if (!sentence) {
-      setIsPlaying(false);
-      return;
+    // Only change source if it's different to prevent resetting playback when pausing/resuming
+    if (audio.src !== sentence.audioUrl) {
+       audio.src = sentence.audioUrl;
+       audio.load();
     }
+    
+    audio.playbackRate = playbackRate;
 
-    const utterance = new SpeechSynthesisUtterance(sentence.text);
-    utterance.rate = playbackRate;
-
-    // Attempt to pick a decent English voice
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Premium') || v.name.includes('Google') || v.name.includes('Samantha')));
-    if (preferredVoice) utterance.voice = preferredVoice;
-
-    utterance.onend = () => {
+    const handleEnded = () => {
       setCurrentTime(sentence.audioEnd);
       setActiveSentenceIdx(prev => {
         const next = prev + 1;
-        if (next >= timings.length) setIsPlaying(false);
+        if (next >= timings.length) {
+           setIsPlaying(false);
+        }
         return next;
       });
     };
 
-    utterance.onboundary = (e) => {
-      if (e.name === 'word') {
-        const pct = e.charIndex / Math.max(1, sentence.text.length);
-        const sentenceDuration = sentence.audioEnd - sentence.audioStart;
-        setCurrentTime(sentence.audioStart + (pct * sentenceDuration));
+    const handleTimeUpdate = () => {
+      if (audio) {
+         setCurrentTime(sentence.audioStart + audio.currentTime);
       }
     };
-
-    utterance.onerror = (e) => {
-      if (e.error !== 'canceled' && e.error !== 'interrupted') {
-        console.error("SpeechSynthesis error type:", e.error, "event:", e);
-        if (e.error === 'synthesis-failed') {
-           alert("Playback failed. Your operating system's built-in text-to-speech engine is missing or misconfigured. (Common on Linux if speech-dispatcher is not installed).");
-           setIsPlaying(false);
-        }
-      }
+    
+    const handleError = (e: any) => {
+      console.error("Audio playback error:", e);
+      setIsPlaying(false);
     };
 
-    currentUtteranceRef.current = utterance;
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('error', handleError);
 
-    let speakTimeout: any;
     if (isPlayingRef.current) {
-      speakTimeout = setTimeout(() => {
-        window.speechSynthesis.speak(utterance);
-      }, 50);
+      audio.play().catch(e => {
+         console.warn("Autoplay prevented:", e);
+         setIsPlaying(false);
+      });
+    } else {
+      audio.pause();
     }
 
     return () => {
-      if (speakTimeout) clearTimeout(speakTimeout);
-      window.speechSynthesis.cancel();
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('error', handleError);
     };
-  }, [activeSentenceIdx, playbackRate, timings]);
+  }, [activeSentenceIdx, isPlaying, timings, playbackRate]);
 
   // Strictly ensure audio is paused when not in reader view
   useEffect(() => {
     if (view === "landing" && isPlaying) {
       setIsPlaying(false);
-      window.speechSynthesis.cancel();
+      if (audioRef.current) audioRef.current.pause();
     }
   }, [view, isPlaying]);
 
   const handlePlayPause = useCallback(() => {
-    setIsPlaying((v) => {
-      const nextPlay = !v;
-      if (nextPlay) {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        } else if (currentUtteranceRef.current && !window.speechSynthesis.speaking) {
-          window.speechSynthesis.speak(currentUtteranceRef.current);
-        }
-      } else {
-        window.speechSynthesis.pause();
-      }
-      return nextPlay;
-    });
+    setIsPlaying((v) => !v);
   }, []);
+
   const handleSeek = useCallback((t: number) => {
     const clampedTime = Math.max(0, Math.min(duration - 0.1, t));
     setCurrentTime(clampedTime);
 
     let idx = timings.findIndex(s => s.audioStart <= clampedTime && s.audioEnd > clampedTime);
     if (idx === -1) idx = timings.findIndex(s => s.audioStart >= clampedTime);
-    if (idx !== -1) setActiveSentenceIdx(idx);
+    if (idx !== -1) {
+      setActiveSentenceIdx(idx);
+      if (audioRef.current) {
+         const relativeTime = clampedTime - timings[idx].audioStart;
+         // Set current time asynchronously to avoid DOM exceptions if source is still loading
+         setTimeout(() => {
+           if (audioRef.current) audioRef.current.currentTime = relativeTime;
+         }, 50);
+      }
+    }
   }, [duration, timings]);
 
   const handleSkipBack = useCallback(() => {
     setActiveSentenceIdx(prev => {
       const nextIdx = Math.max(0, prev - 1);
       setCurrentTime(timings[nextIdx]?.audioStart || 0);
+      if (audioRef.current) audioRef.current.currentTime = 0;
       return nextIdx;
     });
   }, [timings]);
@@ -426,6 +425,7 @@ export default function HomePage() {
     setActiveSentenceIdx(prev => {
       const nextIdx = Math.min(timings.length - 1, prev + 1);
       setCurrentTime(timings[nextIdx]?.audioStart || 0);
+      if (audioRef.current) audioRef.current.currentTime = 0;
       return nextIdx;
     });
   }, [timings]);
