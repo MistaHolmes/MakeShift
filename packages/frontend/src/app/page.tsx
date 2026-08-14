@@ -926,7 +926,7 @@ export default function HomePage() {
       />
 
       {/* ── Background Music Player (Landing Only) ────────────── */}
-      {view === "landing" && <BGMPlayer playlistId={bgmPlaylist} centered={landingMode === "music"} />}
+      {view === "landing" && <BGMPlayer playlistId={bgmPlaylist} centered={landingMode === "music"} settingsLoaded={settingsLoaded} />}
     </div>
   );
 }

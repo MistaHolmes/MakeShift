@@ -21,9 +21,10 @@ const formatTime = (secs: number) => {
 interface BGMPlayerProps {
   playlistId?: string;
   centered?: boolean;
+  settingsLoaded?: boolean;
 }
 
-export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered = false }: BGMPlayerProps) {
+export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered = false, settingsLoaded = false }: BGMPlayerProps) {
   const [expanded, setExpanded] = useState(centered);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoId, setVideoId] = useState<string | null>(null);
@@ -49,6 +50,32 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
     return () => clearInterval(interval);
   }, [isPlaying]);
 
+  // Handle Playback when settings & preferences finish loading
+  useEffect(() => {
+    if (settingsLoaded && playerRef.current && playerRef.current.playVideo) {
+      try {
+        playerRef.current.playVideo();
+      } catch {}
+    }
+  }, [settingsLoaded]);
+
+  // Interaction fallback for strict browser autoplay policies
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      if (playerRef.current && playerRef.current.playVideo && !isPlaying) {
+        try {
+          playerRef.current.playVideo();
+        } catch {}
+      }
+    };
+    window.addEventListener("pointerdown", handleFirstInteraction, { once: true });
+    window.addEventListener("keydown", handleFirstInteraction, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
+  }, [isPlaying]);
+
   const playlistIdRef = useRef(playlistId);
   const activeLoadedPlaylistRef = useRef<string | null>(null);
 
@@ -70,6 +97,9 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
               const randomIdx = Math.floor(Math.random() * playlist.length);
               playerRef.current.playVideoAt(randomIdx);
             }
+          }
+          if (playerRef.current && playerRef.current.playVideo) {
+            playerRef.current.playVideo();
           }
           updateVideoData();
         }, 600);
@@ -120,6 +150,9 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
               if (playlist && playlist.length > 0) {
                 const randomIdx = Math.floor(Math.random() * playlist.length);
                 player.playVideoAt(randomIdx);
+              }
+              if (player.playVideo) {
+                player.playVideo();
               }
               updateVideoData();
             }, 500);
