@@ -223,9 +223,11 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
     : "linear-gradient(135deg, #111, #333)";
 
   return (
-    <div style={{
+    <div 
+      className="max-md:!bottom-[84px]"
+      style={{
       position: "fixed", bottom: 40, 
-      left: centered ? "50%" : "calc(100% - 6vw)",
+      left: centered ? "50%" : "calc(100% - max(16px, 6vw))",
       transform: centered ? "translateX(-50%)" : "translateX(-100%)",
       zIndex: 40,
       display: "flex", alignItems: "flex-end", justifyContent: "flex-end",
@@ -242,7 +244,7 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
           display: "flex", alignItems: "center", justifyContent: "flex-start",
           borderRadius: expanded ? 48 : 99,
           padding: 8,
-          width: expanded ? 500 : 80,
+          width: expanded ? "min(500px, calc(100vw - 32px))" : 80,
           height: 80,
           transition: "all 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
           overflow: "hidden",
@@ -252,17 +254,17 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
         {/* Expanded Controls (Rendered horizontally when expanded) */}
         <div style={{
            display: "flex", flexDirection: "row", alignItems: "center",
-           width: expanded ? 420 : 0,
+           width: expanded ? "calc(100% - 64px)" : 0,
            opacity: expanded ? 1 : 0,
            pointerEvents: expanded ? "auto" : "none",
            transition: "opacity 0.3s ease, width 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
-           paddingLeft: expanded ? 16 : 0,
+           paddingLeft: expanded ? 12 : 0,
            overflow: "hidden",
            whiteSpace: "nowrap"
         }}>
            
            {/* 1. Play Controls (Left) */}
-           <div style={{ display: "flex", alignItems: "center", gap: 16, marginRight: 24, flexShrink: 0 }}>
+           <div style={{ display: "flex", alignItems: "center", gap: 12, marginRight: 16, flexShrink: 0 }}>
              <button onClick={playPrev} className="hover:text-white transition-colors" style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
              </button>
