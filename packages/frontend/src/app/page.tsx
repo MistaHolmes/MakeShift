@@ -39,10 +39,10 @@ function PillButton({ id, onClick, icon, label }: {
         <button
           id={id}
           onClick={onClick}
-          className="hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-200"
+          className="md:px-6 md:py-2 px-3 py-2 hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-200"
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-            padding: "8px 24px", border: "1px solid rgba(255,255,255,0.2)",
+            border: "1px solid rgba(255,255,255,0.2)",
             borderRadius: 99,
             background: "rgba(255,255,255,0.1)", cursor: "pointer",
             fontSize: 13, fontWeight: 600, color: "#fff",
@@ -51,7 +51,7 @@ function PillButton({ id, onClick, icon, label }: {
           }}
         >
           {icon}
-          {label}
+          <span className="hidden md:inline">{label}</span>
         </button>
       </div>
     </div>

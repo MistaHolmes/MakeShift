@@ -1,0 +1,67 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - deploy
+    paths:
+      - 'packages/backend/**'
+      - '.github/workflows/**'
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Image
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: packages/backend
+          file: packages/backend/Dockerfile
+          push: true
+          tags: mistaholmes/makeshift-v0:latest
+
+  create-deploy-pr:
+    name: Create PR to Deploy
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Pull Request
+        run: |
+          gh pr create \
+            --base deploy \
+            --head main \
+            --title "🚀 Deploy Backend Updates" \
+            --body "This PR was automatically generated after a successful Docker build to DockerHub. Merge this PR to trigger a deployment to Render." \
+            || echo "A PR already exists or there are no differences between main and deploy."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-to-render:
+    name: Trigger Render Deployment
+    if: github.ref == 'refs/heads/deploy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Deploy Hook
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
