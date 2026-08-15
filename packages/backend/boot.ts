@@ -8,7 +8,6 @@ export async function runPreBootChecks() {
   // 1. Check ENVs
   const requiredEnvs = [
     'DATABASE_URL',
-    'ELEVENLABS_API_KEY',
     'R2_ENDPOINT',
     'R2_PUBLIC_URL',
     'R2_BUCKET_NAME',
@@ -37,20 +36,6 @@ export async function runPreBootChecks() {
     console.log('[INFO] Database connected successfully.');
   } catch (error) {
     console.error('[ERROR] Database connection failed:', error);
-    process.exit(1);
-  }
-
-  // 3. Check ElevenLabs Access
-  try {
-    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY! }
-    });
-    if (!response.ok) {
-      throw new Error(`Invalid API Key or API unreachable (Status: ${response.status})`);
-    }
-    console.log('[INFO] ElevenLabs API is accessible.');
-  } catch (error) {
-    console.error('[ERROR] ElevenLabs check failed:', error);
     process.exit(1);
   }
 

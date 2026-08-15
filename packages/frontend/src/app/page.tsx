@@ -229,8 +229,6 @@ export default function HomePage() {
       const pagesData = await pagesRes.json();
       
       // Convert backend pages format to frontend timings format
-      // We'll treat each page as a single 'SentenceTiming' for now to get it playing
-      // In the future, we can map alignmentData into exact word boundaries!
       let currentStartTime = 0;
       const combinedTimings: SentenceTiming[] = [];
       let totalDuration = 0;
@@ -238,18 +236,46 @@ export default function HomePage() {
       for (const page of pagesData) {
         if (!page.audioUrl || !page.alignmentData) continue;
         
-        // Calculate page duration using the last character's end time (convert ms to seconds)
-        const times = page.alignmentData.character_end_times_ms;
-        const pageDuration = times && times.length > 0 ? times[times.length - 1] / 1000 : 0;
+        const chars = page.alignmentData.characters;
+        const startTimes = page.alignmentData.character_start_times_seconds;
+        const endTimes = page.alignmentData.character_end_times_seconds;
         
-        combinedTimings.push({
-          text: page.textContent,
-          audioStart: currentStartTime,
-          audioEnd: currentStartTime + pageDuration,
-          // We can stash the audio URL here so our player knows what to play!
-          audioUrl: page.audioUrl 
-        } as any);
+        if (!chars || chars.length === 0) continue;
         
+        let currentSentence = "";
+        let sentenceStart = -1;
+        let sentenceEnd = 0;
+        
+        for (let i = 0; i < chars.length; i++) {
+           const char = chars[i];
+           const start = startTimes[i];
+           const end = endTimes[i];
+           
+           if (sentenceStart === -1) sentenceStart = start;
+           currentSentence += char;
+           sentenceEnd = end;
+           
+           const isLastChar = i === chars.length - 1;
+           const isDelimiter = ['.', '!', '?', '\n'].includes(char);
+           
+           if (isDelimiter || isLastChar) {
+              const trimmed = currentSentence.trim();
+              if (trimmed.length > 0) {
+                 combinedTimings.push({
+                   sentenceId: `p${page.pageNumber}-s${i}`,
+                   text: trimmed,
+                   audioStart: currentStartTime + sentenceStart,
+                   audioEnd: currentStartTime + sentenceEnd,
+                   pageIndex: page.pageNumber - 1,
+                   audioUrl: page.audioUrl
+                 } as any);
+              }
+              currentSentence = "";
+              sentenceStart = -1;
+           }
+        }
+        
+        const pageDuration = endTimes[endTimes.length - 1];
         currentStartTime += pageDuration;
         totalDuration += pageDuration;
       }
@@ -529,6 +555,9 @@ export default function HomePage() {
       position: "relative", height: "100vh", width: "100vw",
       overflow: "hidden", fontFamily: "var(--font-sans)",
       display: "flex", flexDirection: "column",
+      opacity: settingsLoaded ? 1 : 0,
+      transition: "opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
+      backgroundColor: "#050505",
     }}>
       {/* ── Background with subtle gradient overlay ─────────── */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
@@ -926,7 +955,7 @@ export default function HomePage() {
       />
 
       {/* ── Background Music Player (Landing Only) ────────────── */}
-      {view === "landing" && <BGMPlayer playlistId={bgmPlaylist} centered={landingMode === "music"} settingsLoaded={settingsLoaded} />}
+      {view === "landing" && <BGMPlayer key={bgmPlaylist} playlistId={bgmPlaylist} centered={landingMode === "music"} settingsLoaded={settingsLoaded} />}
     </div>
   );
 }
