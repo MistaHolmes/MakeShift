@@ -199,7 +199,7 @@ export default function HomePage() {
       const formData = new FormData();
       formData.append("pdf", file);
 
-      const backendUrl = `http://${window.location.hostname}:3001`;
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:3001`;
 
       const uploadRes = await fetch(`${backendUrl}/api/documents/upload`, {
         method: "POST",
