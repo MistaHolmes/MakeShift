@@ -59,22 +59,32 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
     }
   }, [settingsLoaded]);
 
+  const hasInteractedRef = useRef(false);
+
+  useEffect(() => {
+    if (isPlaying) {
+      hasInteractedRef.current = true;
+    }
+  }, [isPlaying]);
+
   // Interaction fallback for strict browser autoplay policies
   useEffect(() => {
     const handleFirstInteraction = () => {
-      if (playerRef.current && playerRef.current.playVideo && !isPlaying) {
+      if (hasInteractedRef.current) return;
+      if (playerRef.current && playerRef.current.playVideo) {
+        hasInteractedRef.current = true;
         try {
           playerRef.current.playVideo();
         } catch {}
       }
     };
-    window.addEventListener("pointerdown", handleFirstInteraction, { once: true });
-    window.addEventListener("keydown", handleFirstInteraction, { once: true });
+    window.addEventListener("pointerdown", handleFirstInteraction);
+    window.addEventListener("keydown", handleFirstInteraction);
     return () => {
       window.removeEventListener("pointerdown", handleFirstInteraction);
       window.removeEventListener("keydown", handleFirstInteraction);
     };
-  }, [isPlaying]);
+  }, []);
 
   const playlistIdRef = useRef(playlistId);
   const activeLoadedPlaylistRef = useRef<string | null>(null);
