@@ -61,7 +61,6 @@ function PillButton({ id, onClick, icon, label }: {
 const HINDI_PHRASES = [
   { line1: "असीम", line2: "शांति" },
   { line1: "सुहाना", line2: "सफर" },
-  { line1: "डीलक्स", line2: "सैलून" },
   { line1: "लोफ़ी", line2: "धुन" },
   { line1: "धीमी", line2: "हवा" },
   { line1: "सुनहरा", line2: "पल" },
