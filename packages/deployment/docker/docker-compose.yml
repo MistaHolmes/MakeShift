@@ -1,0 +1,13 @@
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    image: mistaholmes/makeshift-v0
+    container_name: makeshift-backend
+    ports:
+      - "3001:3001"
+      - "5000:5000"
+    env_file:
+      - ../../backend/.env
+    restart: unless-stopped

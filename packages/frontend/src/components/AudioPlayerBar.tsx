@@ -159,7 +159,7 @@ export default function AudioPlayerBar({
               min={0}
               max={duration || 100}
               step={0.1}
-              value={displayTime}
+              value={displayTime || 0}
               onChange={handleProgressChange}
               onPointerUp={handlePointerUp}
               onTouchEnd={handlePointerUp}

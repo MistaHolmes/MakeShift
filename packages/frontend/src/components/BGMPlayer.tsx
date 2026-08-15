@@ -42,7 +42,7 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
     if (isPlaying) {
       interval = setInterval(() => {
         if (playerRef.current && playerRef.current.getCurrentTime) {
-          setProgress(playerRef.current.getCurrentTime());
+          setProgress(playerRef.current.getCurrentTime() || 0);
           setDuration(playerRef.current.getDuration() || 1);
         }
       }, 500);
@@ -99,20 +99,12 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
           list: playlistId,
           index: 0,
         });
-        playerRef.current.setShuffle(true);
+        // We defer shuffle slightly so the playlist has time to cue, but we don't force a track
         setTimeout(() => {
-          if (playerRef.current && playerRef.current.getPlaylist) {
-            const playlist = playerRef.current.getPlaylist();
-            if (playlist && playlist.length > 0) {
-              const randomIdx = Math.floor(Math.random() * playlist.length);
-              playerRef.current.playVideoAt(randomIdx);
-            }
-          }
-          if (playerRef.current && playerRef.current.playVideo) {
-            playerRef.current.playVideo();
-          }
-          updateVideoData();
-        }, 600);
+           if (playerRef.current && playerRef.current.setShuffle) {
+              playerRef.current.setShuffle(true);
+           }
+        }, 1500);
       } catch (err) {
         console.error("Error updating playlist:", err);
       }
@@ -139,7 +131,7 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
         playerVars: {
           listType: "playlist",
           list: targetPlaylist,
-          autoplay: 1,
+          autoplay: 0,
           controls: 0,
           disablekb: 1,
         },
@@ -147,25 +139,19 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
           onReady: (event: any) => {
             const player = event.target;
             activeLoadedPlaylistRef.current = playlistIdRef.current;
-            if (playlistIdRef.current !== targetPlaylist && player.loadPlaylist) {
-              player.loadPlaylist({
-                listType: "playlist",
-                list: playlistIdRef.current,
-                index: 0,
-              });
-            }
-            player.setShuffle(true);
-            setTimeout(() => {
+            
+            const tryShuffleAndPlay = () => {
+              if (!player || !player.getPlaylist) return;
               const playlist = player.getPlaylist();
               if (playlist && playlist.length > 0) {
+                if (player.setShuffle) player.setShuffle(true);
                 const randomIdx = Math.floor(Math.random() * playlist.length);
-                player.playVideoAt(randomIdx);
+                if (player.playVideoAt) player.playVideoAt(randomIdx);
+              } else {
+                setTimeout(tryShuffleAndPlay, 150);
               }
-              if (player.playVideo) {
-                player.playVideo();
-              }
-              updateVideoData();
-            }, 500);
+            };
+            tryShuffleAndPlay();
           },
           onStateChange: (event: any) => {
             if (event.data === window.YT.PlayerState.PLAYING) {
@@ -309,8 +295,8 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
                <div style={{ position: "absolute", left: 0, right: 0, height: 3, background: "rgba(255,255,255,0.1)", borderRadius: 99 }} />
                <div style={{ position: "absolute", left: 0, height: 3, background: "var(--clr-accent)", borderRadius: 99, width: `${(progress / duration) * 100}%` }} />
                <input 
-                 type="range" min="0" max={duration} step="0.1" 
-                 value={progress} onChange={handleSeek} 
+                 type="range" min="0" max={duration || 1} step="0.1" 
+                 value={progress || 0} onChange={handleSeek} 
                  style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", cursor: "pointer", zIndex: 10 }} 
                />
                <div style={{ 

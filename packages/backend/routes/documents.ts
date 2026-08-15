@@ -93,9 +93,16 @@ router.post('/:id/generate', async (req: any, res: any) => {
             status: 'GENERATED'
           }
         });
-      } catch (err) {
-        console.error(`Failed to generate TTS for page ${page.pageNumber}:`, err);
+      } catch (err: any) {
+        console.error(`\n[ERROR] CRITICAL FAILURE generating TTS for page ${page.pageNumber}!`);
+        console.error(`[ERROR] Details:`, err.message || err);
+        console.error(`[ERROR] Aborting the entire document generation process to prevent useless API calls.\n`);
+        
         await prisma.page.update({ where: { id: page.id }, data: { status: 'ERROR' } });
+        await prisma.document.update({ where: { id: documentId }, data: { status: 'ERROR' } });
+        
+        // Return immediately so the frontend knows the generation failed
+        return res.status(500).json({ error: 'ElevenLabs TTS Generation Failed', details: err.message || 'Unknown error' });
       }
     }
 

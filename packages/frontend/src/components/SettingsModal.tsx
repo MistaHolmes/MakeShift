@@ -48,14 +48,20 @@ export default function SettingsModal({
   if (!mounted || !isOpen) return null;
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
-      animation: "fadeIn 0.2s ease both"
-    }}>
-      <div className="liquid-glass" style={{
-        position: "relative",
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 100,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+        animation: "fadeIn 0.2s ease both"
+      }}
+    >
+      <div 
+        className="liquid-glass" 
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "relative",
         width: 500, maxWidth: "90vw",
         background: "rgba(16,14,12,0.92)",
         borderRadius: 24, padding: "32px 28px",
@@ -188,7 +194,7 @@ export default function SettingsModal({
             <input
               type="range"
               min="0" max="0.5" step="0.01"
-              value={grainOpacity}
+              value={grainOpacity || 0}
               onChange={(e) => setGrainOpacity(parseFloat(e.target.value))}
               style={{ position: "relative", zIndex: 10, opacity: 0, cursor: "pointer" }}
             />
