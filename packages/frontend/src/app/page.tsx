@@ -39,7 +39,7 @@ function PillButton({ id, onClick, icon, label }: {
         <button
           id={id}
           onClick={onClick}
-          className="md:px-6 md:py-2 px-3 py-2 hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-200"
+          className="pill-btn hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-200"
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
             border: "1px solid rgba(255,255,255,0.2)",
@@ -51,7 +51,7 @@ function PillButton({ id, onClick, icon, label }: {
           }}
         >
           {icon}
-          <span className="hidden md:inline">{label}</span>
+          <span className="pill-btn-label">{label}</span>
         </button>
       </div>
     </div>
@@ -190,12 +190,12 @@ export default function HomePage() {
   const processFile = useCallback(async (file: File) => {
     setPendingFileName(file.name);
     setProcessing(true);
-    
+
     try {
       // 1. Upload & Parse
       setProcessingStage("uploading");
       setProcessingProgress(10);
-      
+
       const formData = new FormData();
       formData.append("pdf", file);
 
@@ -209,55 +209,55 @@ export default function HomePage() {
 
       const uploadData = await uploadRes.json();
       const documentId = uploadData.documentId;
-      
+
       // 2. Generate Audio (this might take time as it processes the whole book)
       setProcessingStage("audio_generation" as any); // using any for stage as it might not be in the enum
       setProcessingProgress(40);
-      
+
       const genRes = await fetch(`${backendUrl}/api/documents/${documentId}/generate`, {
         method: "POST",
       });
       if (!genRes.ok) throw new Error("Audio generation failed");
-      
+
       // 3. Fetch all generated pages
       setProcessingStage("ready" as any);
       setProcessingProgress(90);
-      
+
       const pagesRes = await fetch(`${backendUrl}/api/documents/${documentId}/pages`);
       if (!pagesRes.ok) throw new Error("Failed to fetch generated pages");
-      
+
       const pagesData = await pagesRes.json();
-      
+
       // Convert backend pages format to frontend timings format
       let currentStartTime = 0;
       const combinedTimings: SentenceTiming[] = [];
       let totalDuration = 0;
-      
+
       for (const page of pagesData) {
         if (!page.audioUrl || !page.alignmentData) continue;
-        
+
         const chars = page.alignmentData.characters;
         const startTimes = page.alignmentData.character_start_times_seconds;
         const endTimes = page.alignmentData.character_end_times_seconds;
-        
+
         if (!chars || chars.length === 0) continue;
-        
+
         let currentSentence = "";
         let sentenceStart = -1;
         let sentenceEnd = 0;
-        
+
         for (let i = 0; i < chars.length; i++) {
            const char = chars[i];
            const start = startTimes[i];
            const end = endTimes[i];
-           
+
            if (sentenceStart === -1) sentenceStart = start;
            currentSentence += char;
            sentenceEnd = end;
-           
+
            const isLastChar = i === chars.length - 1;
            const isDelimiter = ['.', '!', '?', '\n'].includes(char);
-           
+
            if (isDelimiter || isLastChar) {
               const trimmed = currentSentence.trim();
               if (trimmed.length > 0) {
@@ -274,21 +274,21 @@ export default function HomePage() {
               sentenceStart = -1;
            }
         }
-        
+
         const pageDuration = endTimes[endTimes.length - 1];
         currentStartTime += pageDuration;
         totalDuration += pageDuration;
       }
 
       setProcessingProgress(100);
-      
+
       const fakeJobResult = { pageCount: pagesData.length };
       setJobResult(fakeJobResult);
       setTimings(combinedTimings);
       setDuration(totalDuration);
       setCurrentTime(0);
       setActiveSentenceIdx(0);
-      
+
       handleProcessingComplete(fakeJobResult, file);
 
     } catch (e: any) {
@@ -344,9 +344,9 @@ export default function HomePage() {
       audioRef.current = new Audio();
       audioRef.current.preservesPitch = true;
     }
-    
+
     const audio = audioRef.current;
-    
+
     if (activeSentenceIdx >= timings.length) {
       setIsPlaying(false);
       return;
@@ -363,7 +363,7 @@ export default function HomePage() {
        audio.src = sentence.audioUrl;
        audio.load();
     }
-    
+
     audio.playbackRate = playbackRate;
 
     const handleEnded = () => {
@@ -382,7 +382,7 @@ export default function HomePage() {
          setCurrentTime(sentence.audioStart + audio.currentTime);
       }
     };
-    
+
     const handleError = (e: any) => {
       console.error("Audio playback error:", e);
       setIsPlaying(false);
@@ -721,7 +721,7 @@ export default function HomePage() {
               <div className="landing-hero-text">
                 <h1 style={{
                   fontFamily: "var(--font-sans)",
-                  fontSize: "clamp(3rem, 5.5vw, 4.5rem)",
+                  fontSize: "clamp(3rem, 5.5vw, 3rem)",
                   fontWeight: 700, lineHeight: 1.15,
                   letterSpacing: "-0.03em", color: "#fff",
                   marginBottom: 20,

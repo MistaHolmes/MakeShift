@@ -325,6 +325,21 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 
 /* ── Responsive Layout Classes ────────────────────────── */
+.pill-btn {
+  padding: 8px 24px;
+}
+.pill-btn-label {
+  display: inline;
+}
+
+@media (max-width: 768px) {
+  .pill-btn {
+    padding: 8px 14px !important;
+  }
+  .pill-btn-label {
+    display: none !important;
+  }
+}
 .main-reader-content {
   display: flex;
   flex-direction: column;
