@@ -104,7 +104,7 @@ export default function HomePage() {
   const [bgImage, setBgImage]               = useState("/bg.png");
   const [bgmPlaylist, setBgmPlaylist]       = useState("PLk4TWo67UoXhMcfG-af8ZXFlBdGr_NKkH");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [landingMode, setLandingMode]       = useState<"default" | "music">("default");
+  const [landingMode, setLandingMode]       = useState<"default" | "music">("music");
   const [hindiPhrase]                       = useState(() => HINDI_PHRASES[Math.floor(Math.random() * HINDI_PHRASES.length)]);
 
   // Restore settings on mount
@@ -117,6 +117,7 @@ export default function HomePage() {
         if (typeof data.grainOpacity === "number") setGrainOpacity(data.grainOpacity);
         if (data.bgImage) setBgImage(data.bgImage);
         if (data.bgmPlaylist) setBgmPlaylist(data.bgmPlaylist);
+        if (data.landingMode) setLandingMode(data.landingMode);
       }
     } catch {}
     setSettingsLoaded(true);
@@ -129,9 +130,9 @@ export default function HomePage() {
     document.documentElement.style.setProperty("--clr-accent-dim", themeColor + "d9");
     document.documentElement.style.setProperty("--grain-opacity", grainOpacity.toString());
     try {
-      localStorage.setItem("makeshift_settings", JSON.stringify({ themeColor, grainOpacity, bgImage, bgmPlaylist }));
+      localStorage.setItem("makeshift_settings", JSON.stringify({ themeColor, grainOpacity, bgImage, bgmPlaylist, landingMode }));
     } catch {}
-  }, [themeColor, grainOpacity, bgImage, bgmPlaylist, settingsLoaded]);
+  }, [themeColor, grainOpacity, bgImage, bgmPlaylist, landingMode, settingsLoaded]);
 
   // We use a ref to track the latest book data so we can save it on unmount/tick without frequent re-renders
   const stateRef = useRef({ activeBook, timings, duration, jobResult, currentTime, books, activeSentenceIdx });
