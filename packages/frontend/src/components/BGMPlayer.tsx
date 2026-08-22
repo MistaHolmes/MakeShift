@@ -322,7 +322,7 @@ export default function BGMPlayer({ playlistId = DEFAULT_PLAYLIST_ID, centered =
             flexShrink: 0,
             width: 64, height: 64, borderRadius: "50%",
             backgroundImage: coverUrl,
-            backgroundSize: "cover",
+            backgroundSize: videoId ? "auto 135%" : "cover",
             backgroundPosition: "center",
             animation: "spin 8s linear infinite",
             animationPlayState: isPlaying ? "running" : "paused",
